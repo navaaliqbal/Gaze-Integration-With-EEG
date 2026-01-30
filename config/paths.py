@@ -6,8 +6,8 @@ from pathlib import Path
 
 class PathConfig:
     # Main data directories
-    DATA_DIR = r'C:\Users\S.S.T\Documents\VsCode\eeg models\gaze guided xai\results\data\data_processed\results1'
-    GAZE_JSON_DIR = r"C:\Users\S.S.T\Documents\VsCode\eeg models\gaze guided xai\results\gaze"
+    DATA_DIR = r"C:\Users\S.S.T\Documents\VsCode\eeg models\results\data\data_processed\results1"
+    GAZE_JSON_DIR = r"C:\Users\S.S.T\Documents\VsCode\eeg models\results\gaze"
     
     # Subdirectories
     TRAIN_SUBDIR = 'train'

@@ -103,7 +103,7 @@ class EEGGazeFixationDataset(Dataset):
         self.channel_to_index = {ch: idx for idx, ch in enumerate(self.channel_mapping)}
         
         # Load data.csv to get file list and labels
-        csv_file = r'C:\Users\S.S.T\Documents\VsCode\eeg models\gaze guided xai\results\data\data_processed\results1\data.csv'
+        csv_file = r"C:\Users\S.S.T\Documents\VsCode\eeg models\results\data\data_processed\results1\data.csv"
         if os.path.exists(csv_file):
             import pandas as pd
             self.df = pd.read_csv(csv_file)
