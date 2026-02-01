@@ -8,10 +8,14 @@ class PathConfig:
     # Main data directories
     DATA_DIR = r"C:\Users\S.S.T\Documents\VsCode\eeg models\results\data\data_processed\results1"
     GAZE_JSON_DIR = r"C:\Users\S.S.T\Documents\VsCode\eeg models\results\gaze"
+    # DATA_DIR = "/kaggle/input/results1/results_1/data1/data_processed1/results0"
+    # GAZE_JSON_DIR = "/kaggle/input/results1/results_1/gaze_data"
     
     # Subdirectories
     TRAIN_SUBDIR = 'train'
     EVAL_SUBDIR = 'eval'
+    # TRAIN_SUBDIR = 'train1'
+    # EVAL_SUBDIR = 'eval1'
     
     # CSV file
     DATA_CSV = os.path.join(DATA_DIR, 'data.csv')
