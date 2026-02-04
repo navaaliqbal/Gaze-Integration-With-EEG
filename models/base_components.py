@@ -54,24 +54,25 @@ class GateDilate(nn.Module):
         return x
 
 class ResConv(nn.Module):
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, dropout_rate=0.5):
         super().__init__()
-        self.conv1 = nn.Conv1d(in_channels=in_channels, out_channels=8, 
-                              kernel_size=5, padding=2)
+        self.conv1 = nn.Conv1d(in_channels, 8, 5, padding=2)
         self.bn1 = nn.BatchNorm1d(8)
-        self.conv2 = nn.Conv1d(in_channels=in_channels + 8, out_channels=16, 
-                              kernel_size=5, padding=2)
+        self.dropout1 = nn.Dropout1d(dropout_rate)
+        self.conv2 = nn.Conv1d(in_channels + 8, 16, 5, padding=2)
         self.bn2 = nn.BatchNorm1d(16)
-        
+        self.dropout2 = nn.Dropout1d(dropout_rate)
+
         nn.init.xavier_uniform_(self.conv1.weight)
         nn.init.xavier_uniform_(self.conv2.weight)
-    
-    def forward(self, input):
-        x1 = F.relu(self.bn1(self.conv1(input)))
-        x1 = torch.cat((x1, input), dim=1)
+
+    def forward(self, x):
+        x1 = F.relu(self.bn1(self.conv1(x)))
+        x1 = self.dropout1(x1)
+        x1 = torch.cat([x1, x], dim=1)
         x2 = F.relu(self.bn2(self.conv2(x1)))
-        x2 = F.dropout(x2, p=0.3, training=self.training)
-        return torch.cat((x2, x1), dim=1)
+        x2 = self.dropout2(x2)
+        return torch.cat([x2, x1], dim=1)
 
 class EEG_Attention(nn.Module):
     """Learnable attention module for gaze alignment"""
@@ -143,3 +144,60 @@ class EEG_Attention(nn.Module):
         attention_map = torch.clamp(attention_map, 0, 1)
         
         return attention_map
+    
+
+# ========== EEG ATTENTION MODULE (for combined) ==========
+class EEG_Attention_MultiRes(nn.Module):
+    def __init__(self, n_channels=22, feature_channels=20, original_time_length=15000):
+        super().__init__()
+        self.n_channels = n_channels
+        self.original_time_length = original_time_length
+        
+        # Temporal attention at 3 scales
+        self.temporal_3000 = nn.Sequential(
+            nn.Conv1d(44, 32, 3, padding=1), nn.BatchNorm1d(32), nn.ReLU(),
+            nn.Conv1d(32, 1, 3, padding=1), nn.Sigmoid()
+        )
+        self.temporal_600 = nn.Sequential(
+            nn.Conv1d(20, 32, 3, padding=1), nn.BatchNorm1d(32), nn.ReLU(),
+            nn.Conv1d(32, 1, 3, padding=1), nn.Sigmoid()
+        )
+        self.temporal_120 = nn.Sequential(
+            nn.Conv1d(feature_channels, 32, 3, padding=1), nn.BatchNorm1d(32), nn.ReLU(),
+            nn.Conv1d(32, 1, 3, padding=1), nn.Sigmoid()
+        )
+        
+        # Spatial attention
+        self.spatial_attention = nn.Sequential(
+            nn.AdaptiveAvgPool1d(1),
+            nn.Flatten(1),
+            nn.Linear(feature_channels, 64), nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(64, n_channels),
+            nn.Sigmoid()
+        )
+        
+        # Learnable weights for scale fusion
+        self.scale_weights = nn.Parameter(torch.ones(3)/3)
+
+    def forward(self, features_3000, features_600, features_120):
+        # Temporal attention
+        att_3000 = F.interpolate(self.temporal_3000(features_3000),
+                                 size=self.original_time_length,
+                                 mode='linear', align_corners=False)
+        att_600 = F.interpolate(self.temporal_600(features_600),
+                                size=self.original_time_length,
+                                mode='linear', align_corners=False)
+        att_120 = F.interpolate(self.temporal_120(features_120),
+                                size=self.original_time_length,
+                                mode='linear', align_corners=False)
+        
+        # Fuse temporal scales
+        weights = F.softmax(self.scale_weights, dim=0)
+        temporal_fused = weights[0]*att_3000 + weights[1]*att_600 + weights[2]*att_120  # [B,1,T]
+        
+        # Spatial attention
+        spatial_att = self.spatial_attention(features_120)  # [B, n_channels]
+        attention_map = temporal_fused * spatial_att.unsqueeze(-1)  # [B, n_channels, T]
+        
+        return torch.clamp(attention_map, 0, 1)  # now 3D, compatible with avg_pool1d
