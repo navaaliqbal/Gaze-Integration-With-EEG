@@ -2,7 +2,6 @@
 Functions for building dataloaders with proper filtering
 """
 import torch
-from torch.utils.data import WeightedRandomSampler
 from collections import Counter
 import numpy as np
 import os
@@ -53,10 +52,7 @@ def get_dataloaders_fixed(data_dir, batch_size, seed, target_length=None, indexe
     print(f"\n  Training label distribution: {dict(class_counts)}")
     print(f"  Number of classes: {num_classes}, Total training samples: {total_samples}")
     
-    class_weights = {cls: total_samples / count for cls, count in class_counts.items()}
-    sample_weights = [class_weights[label] for label in labels]
-    sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
-    
+  
     # Eval dataset
     evalset = FilteredEEGGazeFixationDataset(
         data_dir=eval_dir,
@@ -74,8 +70,7 @@ def get_dataloaders_fixed(data_dir, batch_size, seed, target_length=None, indexe
     train_loader = torch.utils.data.DataLoader(
         trainset,
         batch_size=min(batch_size, len(trainset)) if len(trainset) > 0 else 1,
-        shuffle=False,
-        sampler=sampler,
+        shuffle=True,
         num_workers=0,
         worker_init_fn=worker_init_fn,
         pin_memory=torch.cuda.is_available(),

@@ -58,7 +58,7 @@ def train_epoch_combined(model, train_loader, optimizer, device, gaze_weight=0.2
         if has_gaze and attention_map is not None:
             gaze_loss_raw = compute_gaze_attention_loss(attention_map, gaze, labels, gaze_loss_type)
             gaze_loss_scaled = gaze_loss_raw * gaze_loss_scale  # Apply scaling factor
-            loss = cls_loss + gaze_weight * gaze_loss_scaled  # Apply tunable weight
+            loss = (1 - gaze_weight) * cls_loss + gaze_weight * gaze_loss_scaled  # Apply tunable weight
         else:
             gaze_loss_raw = torch.tensor(0.0).to(device)
             gaze_loss_scaled = torch.tensor(0.0).to(device)

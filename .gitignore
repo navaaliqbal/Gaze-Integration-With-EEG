@@ -1,0 +1,64 @@
+# ================================
+# Python
+# ================================
+__pycache__/
+**/__pycache__/
+config/__pycache__/
+data/__pycache__/
+training/__pycache__/
+models/__pycache__/
+utils/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+.history/
+
+# ================================
+# Jupyter / Notebooks
+# ================================
+.ipynb_checkpoints/
+
+# ================================
+# PyTorch / ML
+# ================================
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# ================================
+# Data files (DO NOT COMMIT RAW DATA)
+# ================================
+*.npz
+*.npy
+*.h5
+*.mat
+*.csv
+*.json
+
+
+# ================================
+# Logs & outputs
+# ================================
+logs/
+runs/
+outputs/
+results/
+checkpoints/
+
+
+# ================================
+# Experiment configs / secrets
+# ================================
+.env
+.env.*
+secrets/
