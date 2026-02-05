@@ -18,7 +18,8 @@ from training.metrics import evaluate_model_comprehensive
 from training.early_stopping import EarlyStopping
 from utils.debugger import DataDebugger
 from utils.statistics_tracker import TrainingStatistics
-
+from training.metrics import compute_gaze_loss_scale
+from sklearn.metrics import classification_report
 def train_integration_approach(integration_type='output', output_suffix=None):
     """
     Train a specific gaze integration approach
@@ -131,12 +132,33 @@ def train_integration_approach(integration_type='output', output_suffix=None):
         traceback.print_exc()
         return None
     
+    # gaze_loss_scaling - configurable
+    if hyps.use_gaze_loss_scaling:
+        gaze_loss_scale, scale_metrics = compute_gaze_loss_scale(
+            model, train_loader, device, hyps.gaze_loss_type
+        )
+        print(f"\n" + "=" * 80)
+        print(f"FIXED SCALING FACTOR FOR ENTIRE TRAINING: {gaze_loss_scale:.2f}")
+        print(f"Effective gaze loss = gaze_weight × gaze_loss_scale × gaze_loss_raw")
+        print(f"With gaze_weight={hyps.gaze_weight:.2f}: Effective scale = {hyps.gaze_weight * gaze_loss_scale:.2f}")
+        print("=" * 80)
+    else:
+        gaze_loss_scale = 1.0
+        print(f"\n" + "=" * 80)
+        print(f"GAZE LOSS SCALING DISABLED - Using default scale: {gaze_loss_scale:.2f}")
+        print(f"Effective gaze loss = gaze_weight × gaze_loss_raw")
+        print(f"With gaze_weight={hyps.gaze_weight:.2f}")
+        print("=" * 80)
+    
+
     # Training loop
     best_acc = 0.0
-    class_counts = [803, 306]  # These should come from your data
+    class_counts = list(train_dist.values())
     total = sum(class_counts)
     class_weights = torch.tensor([total / c for c in class_counts], dtype=torch.float32)
-    
+    print(f"\nClass weights for loss: {class_weights.tolist()}")
+     
+
     print(f"\nStarting training for {hyps.epochs} epochs...")
     print("=" * 80)
     
@@ -151,7 +173,8 @@ def train_integration_approach(integration_type='output', output_suffix=None):
             gaze_loss_type=hyps.gaze_loss_type,
             class_weights=class_weights,
             stats_tracker=stats_tracker,
-            epoch=epoch
+            epoch=epoch,
+            gaze_loss_scale=gaze_loss_scale
         )
         
         # Evaluate
@@ -172,6 +195,7 @@ def train_integration_approach(integration_type='output', output_suffix=None):
         # Print epoch summary
         print(f"\nEpoch {epoch+1} Summary [{integration_type.upper()}]:")
         print(f"  Train: Loss={train_stats['loss']:.4f} | Acc={train_stats['acc']:.2f}%")
+        print(f"Cls Loss={train_stats['cls_loss']:.4f}")
         if 'gaze_loss' in train_stats and train_stats['gaze_loss'] > 0:
             print(f"         Gaze Loss={train_stats['gaze_loss']:.4f}")
         if 'gaze_alpha' in train_stats:
@@ -182,6 +206,8 @@ def train_integration_approach(integration_type='output', output_suffix=None):
               f"Macro F1={eval_stats['macro_f1']:.4f}")
         print(f"  Gaze:  {train_stats['gaze_samples']}/{train_stats['total_samples']} samples")
         print(f"  LR:    {train_stats['lr']:.2e}")
+        report = classification_report(ev_labels, ev_preds, digits=4)
+        print(f"\nClassification Report for Epoch {epoch+1}:\n{report}")
         
         # Save best model
         if eval_stats['acc'] > best_acc:
@@ -270,7 +296,7 @@ def train_integration_approach(integration_type='output', output_suffix=None):
         f.write(f"  Weighted F1: {final_stats['weighted_f1']:.4f}\n")
         f.write(f"\nResults saved to: {stats_tracker.run_dir}\n")
     
-    print(f"\n✅ {integration_type.upper()} integration training complete!")
+    print(f"\n{integration_type.upper()} integration training complete!")
     print(f"Best accuracy: {best_acc:.2f}%")
     print(f"Results saved to: {stats_tracker.run_dir}")
     

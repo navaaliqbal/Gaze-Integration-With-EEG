@@ -9,9 +9,9 @@ import os
 from sklearn.metrics import (classification_report, f1_score, 
                            precision_score, recall_score, 
                            balanced_accuracy_score)
+from training.losses import compute_gaze_attention_loss
 
-def evaluate_model_comprehensive(model, eval_loader, device, stats_tracker=None, 
-                                dataset_name="eval", return_attention=False):
+def evaluate_model_comprehensive(model, eval_loader, device, stats_tracker=None, dataset_name="eval", return_attention=True):
     """Enhanced evaluation with comprehensive statistics."""
     model.eval()
     all_labels = []
@@ -21,7 +21,9 @@ def evaluate_model_comprehensive(model, eval_loader, device, stats_tracker=None,
     all_attention_maps = []
     all_gaze_maps = []
     
-    print(f"\nEvaluating on {dataset_name} set...")
+    # Check if model is combined type (needs gaze parameter)
+    model_name = model.__class__.__name__.lower()
+    is_combined = 'combined' in model_name
     
     with torch.no_grad():
         for batch_idx, batch in enumerate(eval_loader):
@@ -39,13 +41,17 @@ def evaluate_model_comprehensive(model, eval_loader, device, stats_tracker=None,
                             f = str(f)
                     batch_files.append(os.path.basename(str(f)))
             
-            # Forward pass - handle based on return_attention parameter
-            if return_attention:
-                outputs = model(eeg, return_attention=True)
-            else:
-                outputs = model(eeg, return_attention=False)
+            # Get gaze if available (for combined models)
+            gaze = None
+            if 'gaze' in batch and batch['gaze'] is not None:
+                gaze = batch['gaze'].to(device)
             
-            # Handle different output formats
+            # Forward pass with attention - handle combined models
+            if is_combined:
+                outputs = model(eeg, gaze, return_attention=return_attention)
+            else:
+                outputs = model(eeg, return_attention=return_attention)
+            
             if isinstance(outputs, tuple):
                 # Handle tuple output (logits, attention_maps)
                 logits, attention_maps = outputs
@@ -163,3 +169,92 @@ def collect_all_attention_maps(model, dataloader, device, stats_tracker=None, da
     
     print(f"Collected {len(all_data)} attention maps from {dataset_name} dataset")
     return all_data
+
+def compute_gaze_loss_scale(model, train_loader, device, gaze_loss_type='mse'):
+    """
+    Compute a principled scaling factor for gaze_loss so that its gradient contribution
+    is comparable to classification loss.
+    
+    Uses a single training batch, computes the scale once, and returns it fixed for the entire training.
+    
+    Note: Only applicable for models with attention-based gaze integration (output/combined).
+    Input integration models don't use gaze loss, so this returns 1.0 immediately.
+    """
+    print("\n" + "=" * 80)
+    print("COMPUTING GAZE LOSS SCALING FACTOR")
+    print("=" * 80)
+    
+    # Check model type first
+    model_name = model.__class__.__name__.lower()
+    is_input = 'input' in model_name and 'combined' or 'output' not in model_name
+    is_combined = 'combined' in model_name
+    
+    # Input integration doesn't use gaze loss (gaze is at input level)
+    if is_input:
+        print("  INFO: Input integration model detected - no gaze loss scaling needed")
+        return 1.0, {'info': 'Input model - no gaze loss'}
+    
+    # Get a batch with gaze data
+    for batch in train_loader:
+        if 'gaze' in batch and batch['gaze'] is not None:
+            break
+    else:
+        print("  WARNING: No gaze data found in training loader!")
+        return 1.0, {'error': 'No gaze data'}
+    
+    model.eval()  # Just for computation, not training
+    
+    eeg = batch['eeg'].to(device)
+    labels = batch['label'].to(device)
+    gaze = batch['gaze'].to(device)
+    
+    with torch.no_grad():
+        # Forward pass with attention (combined model needs gaze for forward)
+        if is_combined:
+            outputs = model(eeg, gaze, return_attention=True)
+        else:
+            outputs = model(eeg, return_attention=True)
+        
+        if isinstance(outputs, dict):
+            logits = outputs['logits']
+            attention_map = outputs.get('attention_map', None)
+        else:
+            logits = outputs
+            attention_map = None
+        
+        if attention_map is None:
+            print("  WARNING: Model does not return attention map!")
+            return 1.0, {'error': 'No attention map'}
+        
+        # Compute raw losses
+        cls_loss = F.cross_entropy(logits, labels).item()
+        gaze_loss = compute_gaze_attention_loss(attention_map, gaze, labels, gaze_loss_type).item()
+        
+        # Compute scaling factor: cls_loss / gaze_loss
+        if gaze_loss > 1e-8:
+            gaze_loss_scale = cls_loss / gaze_loss
+        else:
+            gaze_loss_scale = 1.0
+        
+        # Clip to reasonable range
+        gaze_loss_scale = np.clip(gaze_loss_scale, 0.1, 100.0)
+        
+        # Diagnostic information
+        metrics = {
+            'cls_loss_raw': cls_loss,
+            'gaze_loss_raw': gaze_loss,
+            'gaze_loss_scale': gaze_loss_scale,
+            'batch_size': eeg.shape[0],
+            'has_gaze': True,
+            'samples_with_gaze': eeg.shape[0],
+            'loss_ratio': cls_loss / gaze_loss if gaze_loss > 0 else float('inf')
+        }
+        
+        print(f"\n  Loss Scaling Analysis:")
+        print(f"    Classification loss: {cls_loss:.6f}")
+        print(f"    Gaze loss (raw): {gaze_loss:.6f}")
+        print(f"    Loss ratio (cls/gaze): {cls_loss/gaze_loss:.2f}:1")
+        print(f"    Recommended gaze_loss_scale: {gaze_loss_scale:.2f}")
+        print(f"    With gaze_weight=1.0: Effective scale = {gaze_loss_scale:.2f}")
+        
+        return gaze_loss_scale, metrics

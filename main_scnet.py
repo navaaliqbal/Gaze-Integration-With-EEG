@@ -23,16 +23,29 @@ def print_epoch_summary(epoch, train_stats, eval_stats, integration_type):
     """Print epoch summary"""
     print("\n" + "=" * 60)
     print(f"Epoch {epoch+1} Summary [SCNet-{integration_type.upper()}]:")
-    print(f"  Train: Loss={train_stats['loss']:.4f} | Acc={train_stats['acc']:.2f}%")
-    if 'gaze_loss' in train_stats and train_stats['gaze_loss'] > 0:
-        print(f"         Gaze Loss={train_stats['gaze_loss']:.4f}")
     
-    print(f"  Eval:  Acc={eval_stats['acc']:.2f}% | "
-          f"Balanced Acc={eval_stats['balanced_acc']:.4f} | "
-          f"Macro F1={eval_stats['macro_f1']:.4f}")
-    print(f"  Gaze:  {train_stats['gaze_samples']}/{train_stats['total_samples']} samples")
-    print(f"  LR:    {train_stats['lr']:.2e}")
+    # Print individual losses
+    if 'cls_loss' in train_stats:
+        print(f"  Classification Loss = {train_stats['cls_loss']:.4f}")
+    if 'gaze_loss' in train_stats:
+        print(f"  Gaze Loss = {train_stats['gaze_loss']:.4f}")
+    print(f"  Total Loss = {train_stats['loss']:.4f}")
+    
+    # Print accuracies
+    print(f"  Train Accuracy = {train_stats['acc']:.2f}%")
+    
+    # Evaluation metrics
+    print(f"  Eval Accuracy = {eval_stats['acc']:.2f}% | "
+          f"Balanced Acc = {eval_stats['balanced_acc']:.4f} | "
+          f"Macro F1 = {eval_stats['macro_f1']:.4f}")
+    
+    # Gaze sample info
+    print(f"  Gaze Samples: {train_stats.get('gaze_samples', 0)}/{train_stats.get('total_samples', 0)}")
+    
+    # Learning rate
+    print(f"  LR: {train_stats.get('lr', 0):.2e}")
     print("=" * 60)
+
 
 def train_scnet_gaze(integration_type='output', output_suffix=None):
     """
@@ -167,6 +180,10 @@ def train_scnet_gaze(integration_type='output', output_suffix=None):
             model, eval_loader, device, stats_tracker, "eval",
             return_attention=True
         )
+
+        from sklearn.metrics import classification_report
+        report = classification_report(ev_labels, ev_preds, digits=4)
+        print(f"\nClassification Report for Epoch {epoch+1}:\n{report}")
         
         # Update scheduler
         metric_for_sched = eval_stats['balanced_acc'] if hyps.early_stop_metric == 'balanced_acc' else eval_stats['macro_f1']

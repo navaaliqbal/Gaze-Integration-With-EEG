@@ -4,8 +4,8 @@ Generic trainer that dispatches to specific trainers based on model type
 from training.trainer_input import train_epoch_input
 from training.trainer_output import train_epoch_output
 from training.trainer_combined import train_epoch_combined
+from config.hyperparameters import Hyperparameters
 from training.trainer_scnet import train_epoch_scnet
-
 def train_epoch(model, train_loader, optimizer, device, **kwargs):
     """
     Generic training epoch that routes to appropriate trainer
@@ -17,6 +17,7 @@ def train_epoch(model, train_loader, optimizer, device, **kwargs):
     Returns:
         Training statistics
     """
+    
     # Determine model type
     model_name = model.__class__.__name__.lower()
     

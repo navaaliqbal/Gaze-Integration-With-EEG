@@ -7,9 +7,13 @@ from tqdm import tqdm
 import os
 
 def train_epoch_input(model, train_loader, optimizer, device, 
-                     class_weights=None, stats_tracker=None, epoch=0):
+                     class_weights=None, stats_tracker=None, epoch=0,
+                     gaze_weight=None, gaze_loss_type=None, gaze_loss_scale=None, **kwargs):
     """
     Training epoch for input integration model
+    
+    Note: gaze_weight, gaze_loss_type, and gaze_loss_scale are accepted but ignored
+    because input integration doesn't use gaze loss (gaze is integrated at input level).
     """
     model.train()
     total_loss = 0.0
