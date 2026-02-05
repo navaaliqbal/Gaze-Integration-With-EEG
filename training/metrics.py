@@ -24,7 +24,7 @@ def evaluate_model_comprehensive(model, eval_loader, device, stats_tracker=None,
     # Check if model is combined type (needs gaze parameter)
     model_name = model.__class__.__name__.lower()
     is_combined = 'combined' in model_name
-    
+    is_scnet_input = 'scnet' in model_name and 'input' in model_name
     with torch.no_grad():
         for batch_idx, batch in enumerate(eval_loader):
             eeg = batch['eeg'].to(device)
@@ -49,20 +49,21 @@ def evaluate_model_comprehensive(model, eval_loader, device, stats_tracker=None,
             # Forward pass with attention - handle combined models
             if is_combined:
                 outputs = model(eeg, gaze, return_attention=return_attention)
+            elif is_scnet_input:
+                logits = model(eeg, gaze)
+                attention_maps = None
             else:
                 outputs = model(eeg, return_attention=return_attention)
             
-            if isinstance(outputs, tuple):
-                # Handle tuple output (logits, attention_maps)
-                logits, attention_maps = outputs
-            elif isinstance(outputs, dict):
-                # Handle dictionary output
-                logits = outputs['logits']
-                attention_maps = outputs.get('attention_map', None)
-            else:
-                # Direct logits output
-                logits = outputs
-                attention_maps = None
+            if not is_scnet_input:
+                if isinstance(outputs, tuple):
+                    logits, attention_maps = outputs
+                elif isinstance(outputs, dict):
+                    logits = outputs['logits']
+                    attention_maps = outputs.get('attention_map', None)
+                else:
+                    logits = outputs
+                    attention_maps = None
             
             # Get predictions
             probs = F.softmax(logits, dim=1).cpu().numpy()

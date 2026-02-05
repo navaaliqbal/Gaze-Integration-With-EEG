@@ -104,7 +104,7 @@ class EEGGazeFixationDataset(Dataset):
         
         # Load data.csv to get file list and labels
         # csv_file = "/kaggle/input/results1/results_1/data1/data_processed1/results0/data_1.csv"
-        csv_file = r"C:\Users\S.S.T\Documents\VsCode\eeg models\results\data\data_processed\results1\data.csv"
+        csv_file = os.path.join(data_dir, 'data.csv')
         if os.path.exists(csv_file):
             import pandas as pd
             self.df = pd.read_csv(csv_file)

@@ -5,6 +5,7 @@ from models.neurogate_gaze_input import NeuroGATE_Gaze_Input
 from models.neurogate_gaze_output import NeuroGATE_Gaze_Output
 from models.neurogate_combined import NeuroGATE_Combined
 from models.scnet_gaze_output import SCNet_Gaze_Output
+from models.scnet_gaze_input import SCNet_Gaze_Input
 
 def create_model(model_type='neurogate', integration_type='output', **kwargs):
     """
@@ -31,9 +32,9 @@ def create_model(model_type='neurogate', integration_type='output', **kwargs):
     elif model_type == 'scnet':
         if integration_type == 'output':
             return SCNet_Gaze_Output(**kwargs)
-        # elif integration_type == 'input':
-        #     from models.scnet_gaze_input import SCNet_Gaze_Input
-        #     return SCNet_Gaze_Input(**kwargs)
+        elif integration_type == 'input':
+            return SCNet_Gaze_Input(**kwargs)
+       
         # elif integration_type == 'both':
         #     from models.scnet_gaze_both import SCNet_Gaze_Both
         #     return SCNet_Gaze_Both(**kwargs)
