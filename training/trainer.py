@@ -6,6 +6,7 @@ from training.trainer_output import train_epoch_output
 from training.trainer_combined import train_epoch_combined
 from config.hyperparameters import Hyperparameters
 from training.trainer_scnet import train_epoch_scnet
+from training.trainer_scnet_input import train_epoch_scnet_input
 def train_epoch(model, train_loader, optimizer, device, **kwargs):
     """
     Generic training epoch that routes to appropriate trainer
@@ -20,9 +21,11 @@ def train_epoch(model, train_loader, optimizer, device, **kwargs):
     
     # Determine model type
     model_name = model.__class__.__name__.lower()
-    
+
+    if 'scnet' in model_name and 'input' in model_name:
+        return train_epoch_scnet_input(model, train_loader, optimizer, device, **kwargs)
     # Check for SCNet models first
-    if 'scnet' in model_name:
+    elif 'scnet' in model_name:
         # All SCNet models use the SCNet trainer
         return train_epoch_scnet(model, train_loader, optimizer, device, **kwargs)
     

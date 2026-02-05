@@ -180,10 +180,17 @@ def train_integration_approach(integration_type='output', output_suffix=None):
         # Evaluate
         # Determine if we need attention for evaluation
         return_attention = integration_type in ['output', 'both']
-        eval_stats, ev_labels, ev_preds, ev_files, ev_attention_maps = evaluate_model_comprehensive(
-            model, eval_loader, device, stats_tracker, "eval",
-            return_attention=return_attention
-        )
+        if return_attention:
+            eval_stats, ev_labels, ev_preds, ev_files, ev_attention_maps = evaluate_model_comprehensive(
+                model, eval_loader, device, stats_tracker, "eval",
+                return_attention=True
+            )
+        else:
+            eval_stats, ev_labels, ev_preds, ev_files = evaluate_model_comprehensive(
+                model, eval_loader, device, stats_tracker, "eval",
+                return_attention=False
+            )
+        
         
         # Update scheduler
         metric_for_sched = eval_stats['balanced_acc'] if hyps.early_stop_metric == 'balanced_acc' else eval_stats['macro_f1']
@@ -247,11 +254,16 @@ def train_integration_approach(integration_type='output', output_suffix=None):
     print(f"FINAL EVALUATION [{integration_type.upper()}]")
     print("=" * 80)
     
-    final_stats, final_labels, final_preds, final_files, final_attention_maps = evaluate_model_comprehensive(
-        model, eval_loader, device, stats_tracker, "eval_final",
-        return_attention=return_attention
-    )
-    
+    if return_attention:
+        final_stats, final_labels, final_preds, final_files, final_attention_maps = evaluate_model_comprehensive(
+            model, eval_loader, device, stats_tracker, "eval_final",
+            return_attention=True
+        )
+    else:
+        final_stats, final_labels, final_preds, final_files = evaluate_model_comprehensive(
+            model, eval_loader, device, stats_tracker, "eval_final",
+            return_attention=False
+        )
     # Print final results
     print(f"\nFinal Results [{integration_type.upper()}]:")
     print(f"  Accuracy: {final_stats['acc']:.2f}%")
