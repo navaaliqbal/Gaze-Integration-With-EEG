@@ -34,19 +34,19 @@ class SILM(nn.Module):
         return torch.cat((x, gap, gsp, gmp), dim=1)  # [B, 25, T]
 
 class SCNet_Gaze_Input(nn.Module):
-    def __init__(self, n_channels=22, n_outputs=2,original_time_length: int = 15000):
+    def __init__(self, n_chan=22, n_outputs=2,original_time_length: int = 15000):
         super(SCNet_Gaze_Input, self).__init__()
 
         # Learnable gaze alpha
         self.gaze_alpha = nn.Parameter(torch.tensor(1.0))
-        self.n_chan = n_channels  # Changed to 22
+        self.n_chan = n_chan  # Changed to 22
         self.n_outputs = n_outputs  # Changed to 2 for binary classification
         self.original_time_length = original_time_length
         # Modules
         self.silm = SILM()
-        self.bn1 = nn.BatchNorm1d((n_channels + 3) * 2)  # After SILM + pooling concat = (22+3)*2 = 50
-        self.mffm_block1 = MFFMBlock((n_channels + 3) * 2)  # 50 -> 74
-        self.mffm_block2 = MFFMBlock((n_channels + 3) * 2)  # 50 -> 74
+        self.bn1 = nn.BatchNorm1d((n_chan + 3) * 2)  # After SILM + pooling concat = (22+3)*2 = 50
+        self.mffm_block1 = MFFMBlock((n_chan + 3) * 2)  # 50 -> 74
+        self.mffm_block2 = MFFMBlock((n_chan + 3) * 2)  # 50 -> 74
 
         self.conv1 = nn.Conv1d(in_channels=74, out_channels=32, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm1d(32)
@@ -104,3 +104,13 @@ class SCNet_Gaze_Input(nn.Module):
         x = x.mean(dim=2)                               # Global average over time
         x = self.fc(x)                                  # [B,2] logits for binary classification
         return x
+
+    def get_config(self):
+        """Get model configuration"""
+        return {
+            'model': 'SCNet_Gaze_Input',
+            'gaze_integration': 'input',
+            'n_chan': self.n_chan,
+            'n_outputs': self.n_outputs,
+            'original_time_length': self.original_time_length
+        }

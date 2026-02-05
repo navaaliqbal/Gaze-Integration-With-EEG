@@ -43,11 +43,7 @@ def print_epoch_summary(epoch, train_stats, eval_stats, integration_type, model=
     
     # Gaze sample info
     print(f"  Gaze Samples: {train_stats.get('gaze_samples', 0)}/{train_stats.get('total_samples', 0)}")
-    if 'gaze_alpha' in train_stats:
-            gaze_str += f"\n  Alpha: {train_stats['gaze_alpha']:.3f}"
-    elif model is not None and hasattr(model, 'gaze_alpha'):
-            gaze_str += f"\n  Alpha: {model.gaze_alpha.item():.3f}"
-    print(gaze_str)    
+  
     # Learning rate
     print(f"  LR: {train_stats.get('lr', 0):.2e}")
     print("=" * 60)
@@ -152,6 +148,7 @@ def train_scnet_gaze(integration_type='input', output_suffix=None, hyp_overrides
         sample_batch = next(iter(train_loader))
         test_eeg = sample_batch['eeg'].to(device)[:2]
         has_gaze = 'gaze' in sample_batch and sample_batch['gaze'] is not None
+        outputs = None
         if integration_type == 'input':
             test_gaze = sample_batch['gaze'].to(device)[:2] if has_gaze else None
             logits = model(test_eeg, test_gaze)
@@ -162,7 +159,7 @@ def train_scnet_gaze(integration_type='input', output_suffix=None, hyp_overrides
             outputs = model(test_eeg, test_gaze, return_attention=True)
             logits = outputs['logits'] if isinstance(outputs, dict) else outputs
         print(f"\nSCNet forward OK, logits shape: {logits.shape}")
-        if isinstance(outputs, dict) and 'attention_map' in outputs:
+        if outputs is not None and isinstance(outputs, dict) and 'attention_map' in outputs:
             print(f"Attention map shape: {outputs['attention_map'].shape}")
     except Exception as e:
         print("SCNet forward error:", e)
