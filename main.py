@@ -18,6 +18,7 @@ from training.metrics import evaluate_model_comprehensive
 from training.early_stopping import EarlyStopping
 from utils.debugger import DataDebugger
 from utils.statistics_tracker import TrainingStatistics
+from training.metrics import compute_gaze_loss_scale
 
 def train_integration_approach(integration_type='output', output_suffix=None):
     """
@@ -131,12 +132,32 @@ def train_integration_approach(integration_type='output', output_suffix=None):
         traceback.print_exc()
         return None
     
+    # gaze_loss_scaling - configurable
+    if hyps.use_gaze_loss_scaling:
+        gaze_loss_scale, scale_metrics = compute_gaze_loss_scale(
+            model, train_loader, device, hyps.gaze_loss_type
+        )
+        print(f"\n" + "=" * 80)
+        print(f"FIXED SCALING FACTOR FOR ENTIRE TRAINING: {gaze_loss_scale:.2f}")
+        print(f"Effective gaze loss = gaze_weight × gaze_loss_scale × gaze_loss_raw")
+        print(f"With gaze_weight={hyps.gaze_weight:.2f}: Effective scale = {hyps.gaze_weight * gaze_loss_scale:.2f}")
+        print("=" * 80)
+    else:
+        gaze_loss_scale = 1.0
+        print(f"\n" + "=" * 80)
+        print(f"GAZE LOSS SCALING DISABLED - Using default scale: {gaze_loss_scale:.2f}")
+        print(f"Effective gaze loss = gaze_weight × gaze_loss_raw")
+        print(f"With gaze_weight={hyps.gaze_weight:.2f}")
+        print("=" * 80)
+    
+
     # Training loop
     best_acc = 0.0
     class_counts = [803, 306]  # These should come from your data
     total = sum(class_counts)
     class_weights = torch.tensor([total / c for c in class_counts], dtype=torch.float32)
-    
+     
+
     print(f"\nStarting training for {hyps.epochs} epochs...")
     print("=" * 80)
     
@@ -151,7 +172,8 @@ def train_integration_approach(integration_type='output', output_suffix=None):
             gaze_loss_type=hyps.gaze_loss_type,
             class_weights=class_weights,
             stats_tracker=stats_tracker,
-            epoch=epoch
+            epoch=epoch,
+            gaze_loss_scale=gaze_loss_scale
         )
         
         # Evaluate

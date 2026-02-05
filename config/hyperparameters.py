@@ -23,6 +23,7 @@ class Hyperparameters:
     # Gaze attention parameters
     gaze_weight: float = 0.2  # Weight for gaze loss (output/both)
     gaze_loss_type: str = 'cosine'  # 'mse', 'cosine', 'combined'
+    use_gaze_loss_scaling: bool = True  # If True, compute scaling factor; if False, use 1.0
     
     # Input integration parameters
     input_gaze_alpha: float = 1.0  # Initial gaze alpha for input integration
