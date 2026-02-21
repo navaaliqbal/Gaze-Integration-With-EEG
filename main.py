@@ -258,34 +258,24 @@ def train_integration_approach(arch="neurogate", integration_type="output", outp
             epoch=epoch,
             gaze_loss_scale=gaze_loss_scale
         )
-
-        # Return attention during eval only if model supports it
-        return_attention = integration_type in ["output", "both"]
-
+        
+        # Evaluate
+        # Determine if we need attention for evaluation
+        return_attention = integration_type in ['output', 'both']
         if return_attention:
             eval_stats, ev_labels, ev_preds, ev_files, ev_attention_maps = evaluate_model_comprehensive(
                 model, eval_loader, device, stats_tracker, "eval",
-                return_attention=True,
-                gaze_weight=hyps.gaze_weight,
-                gaze_loss_type=hyps.gaze_loss_type,
-                class_weights=class_weights,
-                gaze_loss_scale=gaze_loss_scale
+                return_attention=True
             )
         else:
             eval_stats, ev_labels, ev_preds, ev_files = evaluate_model_comprehensive(
                 model, eval_loader, device, stats_tracker, "eval",
-                return_attention=False,
-                gaze_weight=hyps.gaze_weight,
-                gaze_loss_type=hyps.gaze_loss_type,
-                class_weights=class_weights,
-                gaze_loss_scale=gaze_loss_scale
+                return_attention=False
             )
-
-        # Scheduler metric
-        if hyps.early_stop_metric == "eval_loss":
-            metric_for_sched = -eval_stats["loss"]
-        else:
-            metric_for_sched = eval_stats["balanced_acc"] if hyps.early_stop_metric == "balanced_acc" else eval_stats["macro_f1"]
+        
+        
+        # Update scheduler
+        metric_for_sched = eval_stats['balanced_acc'] if hyps.early_stop_metric == 'balanced_acc' else eval_stats['macro_f1']
         scheduler.step(metric_for_sched)
 
         # Record epoch
@@ -350,27 +340,19 @@ def train_integration_approach(arch="neurogate", integration_type="output", outp
     print("\n" + "=" * 80)
     print(f"FINAL EVALUATION [{arch.upper()} | {integration_type.upper()}]")
     print("=" * 80)
-
+    
     if return_attention:
         final_stats, final_labels, final_preds, final_files, final_attention_maps = evaluate_model_comprehensive(
             model, eval_loader, device, stats_tracker, "eval_final",
-            return_attention=True,
-            gaze_weight=hyps.gaze_weight,
-            gaze_loss_type=hyps.gaze_loss_type,
-            class_weights=class_weights,
-            gaze_loss_scale=gaze_loss_scale
+            return_attention=True
         )
     else:
         final_stats, final_labels, final_preds, final_files = evaluate_model_comprehensive(
             model, eval_loader, device, stats_tracker, "eval_final",
-            return_attention=False,
-            gaze_weight=hyps.gaze_weight,
-            gaze_loss_type=hyps.gaze_loss_type,
-            class_weights=class_weights,
-            gaze_loss_scale=gaze_loss_scale
+            return_attention=False
         )
-
-    print(f"\nFinal Results [{arch.upper()} | {integration_type.upper()}]:")
+    # Print final results
+    print(f"\nFinal Results [{integration_type.upper()}]:")
     print(f"  Accuracy: {final_stats['acc']:.2f}%")
     print(f"  Balanced Accuracy: {final_stats['balanced_acc']:.4f}")
     print(f"  Macro F1: {final_stats['macro_f1']:.4f}")

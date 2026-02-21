@@ -16,6 +16,18 @@ class PathConfig:
 
     EVAL_DIR = "/kaggle/input/datasets/ayeshasiddiqa19104/npzfiles1/results/data/data_processed/results0/eval"
 
+    # Main data directories
+    # DATA_DIR = r"C:\Users\S.S.T\Documents\VsCode\eeg models\results\data\data_processed\results1"
+    # GAZE_JSON_DIR = r"C:\Users\S.S.T\Documents\VsCode\eeg models\results\gaze"
+    # DATA_DIR = "/kaggle/input/results1/results_1/data1/data_processed1/results0"
+    # GAZE_JSON_DIR = "/kaggle/input/results1/results_1/gaze_data"
+    DATA_DIR = r"D:\athar_code\results\data\data_processed\results0"
+    GAZE_JSON_DIR = r"D:\athar_code\results\gaze"
+
+    # kaggle paths
+    # DATA_DIR = r'/kaggle/input/gazedata/results/data/data_processed/results0'
+    # GAZE_JSON_DIR =  r'/kaggle/input/gazefixations/gaze'
+    # Subdirectories
     TRAIN_SUBDIR = 'train'
     EVAL_SUBDIR = 'eval'
     # TRAIN_SUBDIR = 'train1'

@@ -12,6 +12,7 @@ from models.eegnet_base import EEGNet_Base
 from models.eegnet_gaze_input import EEGNet_Gaze_Input
 from models.eegnet_gaze_output import EEGNet_Gaze_Output
 from models.eegnet_gaze_combined import EEGNet_Gaze_Combined
+from models.scnet_gaze_input import SCNet_Gaze_Input
 
 
 def create_eegnet_model(integration_type='none', **kwargs):
@@ -44,9 +45,17 @@ def create_scnet_model(integration_type='none', **kwargs):
     """
     Create SCNet model with specified gaze integration
     
-    Args:
-        integration_type: 'none', 'input', 'output', or 'both'
-        **kwargs: Model parameters (n_chan, n_outputs, original_time_length)
+    elif model_type == 'scnet':
+        if integration_type == 'output':
+            return SCNet_Gaze_Output(**kwargs)
+        elif integration_type == 'input':
+            return SCNet_Gaze_Input(**kwargs)
+       
+        # elif integration_type == 'both':
+        #     from models.scnet_gaze_both import SCNet_Gaze_Both
+        #     return SCNet_Gaze_Both(**kwargs)
+        else:
+            raise ValueError(f"Unknown integration type for SCNet: {integration_type}")
     
     Returns:
         SCNet model instance

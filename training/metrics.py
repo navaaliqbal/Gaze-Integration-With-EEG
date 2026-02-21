@@ -28,24 +28,8 @@ def evaluate_model_comprehensive(model, eval_loader, device, stats_tracker=None,
     
     # Determine model type
     model_name = model.__class__.__name__.lower()
-    is_output_model = 'output' in model_name
-    is_input_model = 'input' in model_name
-    is_combined_model = 'combined' in model_name
-    is_base_model = 'base' in model_name or (not is_output_model and not is_input_model and not is_combined_model)
-    
-    model_type = "BASE" if is_base_model else \
-                 "INPUT" if is_input_model else \
-                 "OUTPUT" if is_output_model else \
-                 "COMBINED" if is_combined_model else "UNKNOWN"
-    
-    print(f"\nEvaluating {dataset_name} dataset with {model_type} model...")
-    
-    # Loss tracking
-    total_loss = 0.0
-    total_cls_loss = 0.0
-    total_gaze_loss = 0.0
-    num_batches = 0
-    
+    is_combined = 'combined' in model_name
+    is_scnet_input = 'scnet' in model_name and 'input' in model_name
     with torch.no_grad():
         for batch_idx, batch in enumerate(eval_loader):
             eeg = batch['eeg'].to(device)
@@ -68,54 +52,24 @@ def evaluate_model_comprehensive(model, eval_loader, device, stats_tracker=None,
             if has_gaze:
                 gaze = batch['gaze'].to(device)
             
-            # ========== FORWARD PASS BASED ON MODEL TYPE ==========
-            
-            # CASE 1: BASE MODEL - no gaze, no attention
-            if is_base_model:
-                logits = model(eeg)
-                attention_maps = None
-            
-            # CASE 2: INPUT MODEL - takes gaze as input, no attention
-            elif is_input_model:
+            # Forward pass with attention - handle combined models
+            if is_combined:
+                outputs = model(eeg, gaze, return_attention=return_attention)
+            elif is_scnet_input:
                 logits = model(eeg, gaze)
                 attention_maps = None
-            
-            # CASE 3: OUTPUT MODEL - may return attention
-            elif is_output_model:
-                if return_attention:
-                    outputs = model(eeg, return_attention=True)
-                    if isinstance(outputs, dict):
-                        logits = outputs['logits']
-                        attention_maps = outputs.get('attention_map', None)
-                    elif isinstance(outputs, tuple):
-                        logits, attention_maps = outputs
-                    else:
-                        logits = outputs
-                        attention_maps = None
-                else:
-                    logits = model(eeg, return_attention=False)
-                    attention_maps = None
-            
-            # CASE 4: COMBINED MODEL - takes gaze and may return attention
-            elif is_combined_model:
-                if return_attention:
-                    outputs = model(eeg, gaze, return_attention=True)
-                    if isinstance(outputs, dict):
-                        logits = outputs['logits']
-                        attention_maps = outputs.get('attention_map', None)
-                    elif isinstance(outputs, tuple):
-                        logits, attention_maps = outputs
-                    else:
-                        logits = outputs
-                        attention_maps = None
-                else:
-                    logits = model(eeg, gaze, return_attention=False)
-                    attention_maps = None
-            
             else:
-                # Fallback - assume base model
-                logits = model(eeg)
-                attention_maps = None
+                outputs = model(eeg, return_attention=return_attention)
+            
+            if not is_scnet_input:
+                if isinstance(outputs, tuple):
+                    logits, attention_maps = outputs
+                elif isinstance(outputs, dict):
+                    logits = outputs['logits']
+                    attention_maps = outputs.get('attention_map', None)
+                else:
+                    logits = outputs
+                    attention_maps = None
             
             # ========== LOSS COMPUTATION ==========
             

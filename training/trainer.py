@@ -10,13 +10,8 @@ from training.trainer_output import train_epoch_output
 from training.trainer_combined import train_epoch_combined
 from training.trainer_cls_only import train_epoch_cls_only
 from training.trainer_scnet import train_epoch_scnet
-
-
-def train_epoch_eegnet_base(model, train_loader, optimizer, device, 
-                           class_weights=None, stats_tracker=None, epoch=0,
-                           **kwargs):
-    """
-    Specialized trainer for base EEGNet (no gaze integration)
+from training.trainer_scnet_input import train_epoch_scnet_input
+def train_epoch(model, train_loader, optimizer, device, **kwargs):
     """
     model.train()
     total_loss = 0.0
@@ -85,14 +80,12 @@ def train_epoch(model, train_loader, optimizer, device, **kwargs):
     Dispatch to appropriate trainer based on model class name
     """
     model_name = model.__class__.__name__.lower()
-    
-    # Debug print to see what model we're dealing with
-    print(f"\nDEBUG - Model class: {model.__class__.__name__}")
-    print(f"DEBUG - Model name (lower): {model_name}")
-    
-    # Check for SCNet first
-    if 'scnet' in model_name:
-        print("DEBUG -> Using SCNet trainer")
+
+    if 'scnet' in model_name and 'input' in model_name:
+        return train_epoch_scnet_input(model, train_loader, optimizer, device, **kwargs)
+    # Check for SCNet models first
+    elif 'scnet' in model_name:
+        # All SCNet models use the SCNet trainer
         return train_epoch_scnet(model, train_loader, optimizer, device, **kwargs)
     
     # Check for specific EEGNet variants
