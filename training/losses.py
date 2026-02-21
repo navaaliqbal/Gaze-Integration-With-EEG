@@ -55,6 +55,18 @@ def compute_gaze_attention_loss(attention_map, gaze, labels, loss_type='mse'):
         gaze_flat = gaze.reshape(gaze.shape[0], -1)
         cosine = 1 - F.cosine_similarity(att_flat, gaze_flat).mean()
         return mse + 0.5 * cosine
-    
+    elif loss_type == 'combined_2':
+        # Combine multiple losses - best for sum-normalized distributions
+        # 1. Cosine similarity for direction
+        att_flat = attention_map.view(attention_map.shape[0], -1)
+        gaze_flat = gaze.view(gaze.shape[0], -1)
+        cosine = 1 - F.cosine_similarity(att_flat, gaze_flat).mean()
+        
+        # 2. KL divergence for distribution matching
+        att_flat_norm = (att_flat + 1e-8) / (att_flat.sum(dim=1, keepdim=True) + 1e-8)
+        gaze_flat_norm = (gaze_flat + 1e-8) / (gaze_flat.sum(dim=1, keepdim=True) + 1e-8)
+        kl = F.kl_div(att_flat_norm.log(), gaze_flat_norm, reduction='batchmean')
+        
+        return 0.5 * cosine + 0.5 * kl
     else:
         raise ValueError(f"Unknown gaze loss type: {loss_type}")

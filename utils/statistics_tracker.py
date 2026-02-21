@@ -147,14 +147,14 @@ class TrainingStatistics:
             if param.requires_grad:
                 weight_data['weights'][name] = {
                     'mean': param.data.mean().item(),
-                    'std': param.data.std().item(),
+                    'std': param.data.std().item() if param.data.numel() > 1 else 0.0,
                     'min': param.data.min().item(),
                     'max': param.data.max().item()
                 }
                 if param.grad is not None:
                     weight_data['gradients'][name] = {
                         'mean': param.grad.mean().item(),
-                        'std': param.grad.std().item(),
+                        'std': param.grad.std().item() if param.grad.numel() > 1 else 0.0,
                         'norm': param.grad.norm().item()
                     }
         

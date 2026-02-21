@@ -19,8 +19,8 @@ class NeuroGATE_Gaze_Input(nn.Module):
         self.n_outputs = n_outputs
         self.original_time_length = original_time_length
         
-        # Learnable gaze strength for input modulation
-        self.gaze_alpha = nn.Parameter(torch.tensor(1.0))
+        # 🔑 Learnable gaze strength for input modulation
+        self.gaze_alpha = nn.Parameter(torch.tensor(0.1))
         
         # NeuroGATE architecture (same as output version but without attention layer)
         fused_ch = 2 * n_chan
@@ -49,7 +49,7 @@ class NeuroGATE_Gaze_Input(nn.Module):
         
         # Encoder
         self.encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(20, 4, dropout=0.5, batch_first=True), 2
+            nn.TransformerEncoderLayer(20, 4, dropout=0.1, batch_first=True), 2
         )
         
         # Final classification layer
@@ -60,6 +60,10 @@ class NeuroGATE_Gaze_Input(nn.Module):
         nn.init.xavier_uniform_(self.conv2.weight)
         nn.init.xavier_uniform_(self.conv3.weight)
         nn.init.xavier_uniform_(self.fc.weight)
+        
+        # Initialize final layer bias to zero for balanced predictions
+        if self.fc.bias is not None:
+            nn.init.zeros_(self.fc.bias)
     
     def forward(self, eeg, gaze=None):
         """
@@ -91,7 +95,7 @@ class NeuroGATE_Gaze_Input(nn.Module):
         x1 = self.res_conv1(x)
         x2 = self.gate_dilate1(x)
         x = x1 + x2
-        x = F.dropout2d(x, 0.5, training=self.training)
+        x = F.dropout(x, 0.2, training=self.training)
         x = F.max_pool1d(x, kernel_size=5, stride=5)
         
         # Conv Block

@@ -7,13 +7,13 @@ import torch.nn.functional as F
 from models.base_components import GateDilate, ResConv, EEG_Attention_MultiRes
 
 class NeuroGATE_Combined(nn.Module):
-    def __init__(self, n_chan=22, n_outputs=2, original_time_length=60000, dropout_rate=0.5):
+    def __init__(self, n_chan=22, n_outputs=2, original_time_length=6000, dropout_rate=0.2):
         super().__init__()
         self.n_chan = n_chan
         self.n_outputs = n_outputs
         self.original_time_length = original_time_length
         self.dropout_rate = dropout_rate
-        self.gaze_alpha = nn.Parameter(torch.tensor(1.0))
+        self.gaze_alpha = nn.Parameter(torch.tensor(0.1))
         
         # Architecture
         fused_ch = 2 * n_chan
@@ -79,8 +79,18 @@ class NeuroGATE_Combined(nn.Module):
         
         # Classification
         if attention_map is not None:
-            attention_down = F.avg_pool1d(attention_map, 125, 125)  # [B, n_channels, 120]
-            attention_down = attention_down.mean(dim=1, keepdim=True)  # [B,1,120]
+            # Downsample attention to match feature resolution (ADAPTIVE)
+            # Calculate pooling factor dynamically based on actual dimensions
+            feature_time_dim = features_120.shape[-1]  # Actual temporal dimension
+            attention_time_dim = attention_map.shape[-1]
+            pool_factor = attention_time_dim // feature_time_dim
+            
+            if pool_factor > 1:
+                attention_down = F.avg_pool1d(attention_map, pool_factor, pool_factor)
+            else:
+                attention_down = attention_map
+            
+            attention_down = attention_down.mean(dim=1, keepdim=True)  # [B,1,feature_time_dim]
             attended_features = features_120 * attention_down
             x_pooled = torch.mean(attended_features, dim=2)
 

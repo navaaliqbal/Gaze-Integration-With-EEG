@@ -535,6 +535,7 @@ class EEGGazeFixationDataset(Dataset):
         
         # Normalize
         if gaze_map.max() > 0:
+            # can use gaze_map.sum() if you want to preserve total attention, but max normalization is simpler
             gaze_map = gaze_map / gaze_map.max()
             if self.debug:
                 print(f"  ✓ Normalized gaze map (max was {gaze_map.max():.6f})")

@@ -77,27 +77,28 @@ class NeuroGATE_Gaze_Output(nn.Module):
         batch_size, channels, original_time = x.shape
         
         # ========== 1. FEATURE EXTRACTION ==========
-        # EXACTLY SAME as original, but we SAVE features at each scale
+        # Multi-scale feature extraction with pooling
+        # Note: Actual dimensions depend on original_time_length parameter
         
-        # First pooling: 15000 → 3000
+        # First pooling: reduces by factor of 5
         x1 = F.avg_pool1d(x, kernel_size=5, stride=5)
         x2 = F.max_pool1d(x, kernel_size=5, stride=5)
-        x = torch.cat((x1, x2), dim=1)  # [batch, 44, 3000]
+        x = torch.cat((x1, x2), dim=1)  # [batch, 44, T/5]
         x = self.bn1(x)
         
-        # SAVE early features (3000 time points)
+        # SAVE early features (T/5 time points)
         features_3000 = x
         
         x1 = self.res_conv1(x)  # NOW HAS DROPOUT INSIDE
         x2 = self.gate_dilate1(x)
         x = x1 + x2
         x = F.dropout1d(x, self.dropout_rate, training=self.training)  # USE PARAMETER
-        x = F.max_pool1d(x, kernel_size=5, stride=5)  # [batch, *, 600]
+        x = F.max_pool1d(x, kernel_size=5, stride=5)  # [batch, *, T/25]
         
         x = F.relu(self.bn2(self.conv1(x)))
         
-        # SAVE middle features (600 time points)
-        features_600 = x  # [batch, 20, 600]
+        # SAVE middle features (T/25 time points)
+        features_600 = x  # [batch, 20, T/25]
         
         x1 = self.res_conv2(x)  # NOW HAS DROPOUT INSIDE
         x2 = self.gate_dilate2(x)
@@ -105,17 +106,17 @@ class NeuroGATE_Gaze_Output(nn.Module):
         x = self.bn3(self.conv2(x))
         
         x = self.res_conv3(x)  # NOW HAS DROPOUT INSIDE
-        x = F.max_pool1d(x, kernel_size=5, stride=5)  # [batch, *, 120]
+        x = F.max_pool1d(x, kernel_size=5, stride=5)  # [batch, *, T/125]
         
-        x = self.bn4(self.conv3(x))  # [batch, 20, 120]
+        x = self.bn4(self.conv3(x))  # [batch, 20, T/125]
         
         # ========== 2. TRANSFORMER ENCODER ==========
         x = x.permute(0, 2, 1)  # (batch, time, features)
         x = self.encoder(x)
         x = x.permute(0, 2, 1)  # Back to (batch, features, time)
         
-        # These are our final encoded features
-        features_120 = x  # [batch, 20, 120]
+        # These are our final encoded features at reduced temporal resolution
+        features_120 = x  # [batch, 20, T/125]
         
         # ========== 3. GENERATE ATTENTION MAP ==========
         attention_map = None
@@ -123,20 +124,25 @@ class NeuroGATE_Gaze_Output(nn.Module):
             # USE MULTI-RESOLUTION: Pass features from ALL 3 scales
             attention_map = self.attention_layer(
                 features_3000, features_600, features_120
-            )  # [batch, 22, 15000]
+            )  # [batch, n_chan, original_time_length]
         
         # ========== 4. CLASSIFICATION ==========
         # SAME AS ORIGINAL
         if attention_map is not None:
-            # Downsample attention to match feature resolution
-            # kernel_size = attention_map.shape[2] // features_120.shape[2]
-
-            attention_down = F.adaptive_avg_pool1d(attention_map, features_120.shape[2])
-
-            # attention_down: [batch, 22, 120]
+            # Downsample attention to match feature resolution (ADAPTIVE)
+            # Calculate pooling factor dynamically based on actual dimensions
+            feature_time_dim = features_120.shape[-1]  # Actual temporal dimension of features
+            attention_time_dim = attention_map.shape[-1]  # Temporal dimension of attention
+            pool_factor = attention_time_dim // feature_time_dim
+            
+            if pool_factor > 1:
+                attention_down = F.avg_pool1d(attention_map, kernel_size=pool_factor, stride=pool_factor)
+            else:
+                # If dimensions already match, no pooling needed
+                attention_down = attention_map
             
             # Apply attention (average over channels for features)
-            attention_weights = attention_down.mean(dim=1, keepdim=True)  # [batch, 1, 120]
+            attention_weights = attention_down.mean(dim=1, keepdim=True)  # [batch, 1, feature_time_dim]
             attended_features = features_120 * attention_weights
             x_pooled = torch.mean(attended_features, dim=2)
         else:
