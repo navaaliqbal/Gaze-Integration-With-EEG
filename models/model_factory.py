@@ -1,60 +1,71 @@
 """
-Factory to create NeuroGATE and SCNet models with different gaze integration approaches
+Factory to create all SCNet variants
 """
-from models.neurogate_gaze_input import NeuroGATE_Gaze_Input
-from models.neurogate_gaze_output import NeuroGATE_Gaze_Output
-from models.neurogate_combined import NeuroGATE_Combined
+from models.scnet_base import SCNet_Base
+from models.scnet_gaze_input import SCNet_Gaze_Input
 from models.scnet_gaze_output import SCNet_Gaze_Output
+from models.scnet_gaze_combined import SCNet_Gaze_Combined
+"""
+Factory to create all EEGNet variants
+"""
+from models.eegnet_base import EEGNet_Base
+from models.eegnet_gaze_input import EEGNet_Gaze_Input
+from models.eegnet_gaze_output import EEGNet_Gaze_Output
+from models.eegnet_gaze_combined import EEGNet_Gaze_Combined
 
-def create_model(model_type='neurogate', integration_type='output', **kwargs):
+
+def create_eegnet_model(integration_type='none', **kwargs):
     """
-    Create model based on type and integration
+    Create EEGNet model with specified gaze integration
     
     Args:
-        model_type: 'neurogate' or 'scnet'
-        integration_type: 'input', 'output', or 'both'
-        **kwargs: Model-specific parameters
-        
+        integration_type: 'none', 'input', 'output', or 'both'
+        **kwargs: Model parameters (num_input, num_class, channel, signal_length,
+                  fs, F1, D, dropout_rate)
+    
     Returns:
-        Model instance
+        EEGNet model instance
     """
-    if model_type == 'neurogate':
-        if integration_type == 'input':
-            return NeuroGATE_Gaze_Input(**kwargs)
-        elif integration_type == 'output':
-            return NeuroGATE_Gaze_Output(**kwargs)
-        elif integration_type == 'both':
-            return NeuroGATE_Combined(**kwargs)
-        else:
-            raise ValueError(f"Unknown integration type for NeuroGATE: {integration_type}")
-    
-    elif model_type == 'scnet':
-        if integration_type == 'output':
-            return SCNet_Gaze_Output(**kwargs)
-        # elif integration_type == 'input':
-        #     from models.scnet_gaze_input import SCNet_Gaze_Input
-        #     return SCNet_Gaze_Input(**kwargs)
-        # elif integration_type == 'both':
-        #     from models.scnet_gaze_both import SCNet_Gaze_Both
-        #     return SCNet_Gaze_Both(**kwargs)
-        else:
-            raise ValueError(f"Unknown integration type for SCNet: {integration_type}")
-    
+    if integration_type == 'none':
+        return EEGNet_Base(**kwargs)
+    elif integration_type == 'input':
+        return EEGNet_Gaze_Input(**kwargs)
+    elif integration_type == 'output':
+        return EEGNet_Gaze_Output(**kwargs)
+    elif integration_type == 'both':
+        return EEGNet_Gaze_Combined(**kwargs)
     else:
-        raise ValueError(f"Unknown model_type: {model_type}. Must be 'neurogate' or 'scnet'")
+        raise ValueError(f"Unknown integration type: {integration_type}")
 
-# For backward compatibility
-def create_neurogate_model(integration_type='output', **kwargs):
-    """Legacy function for backward compatibility"""
-    return create_model('neurogate', integration_type, **kwargs)
 
-def create_scnet_model(integration_type='output', **kwargs):
-    """Create SCNet model"""
-    return create_model('scnet', integration_type, **kwargs)
+
+
+def create_scnet_model(integration_type='none', **kwargs):
+    """
+    Create SCNet model with specified gaze integration
+    
+    Args:
+        integration_type: 'none', 'input', 'output', or 'both'
+        **kwargs: Model parameters (n_chan, n_outputs, original_time_length)
+    
+    Returns:
+        SCNet model instance
+    """
+    if integration_type == 'none':
+        return SCNet_Base(**kwargs)
+    elif integration_type == 'input':
+        return SCNet_Gaze_Input(**kwargs)
+    elif integration_type == 'output':
+        return SCNet_Gaze_Output(**kwargs)
+    elif integration_type == 'both':
+        return SCNet_Gaze_Combined(**kwargs)
+    else:
+        raise ValueError(f"Unknown integration type: {integration_type}")
+
 
 def get_model_config(model):
     """Get configuration of a model"""
     if hasattr(model, 'get_config'):
         return model.get_config()
     else:
-        return {'model_type': 'unknown', 'gaze_integration': 'unknown'}
+        return {'model': 'unknown', 'gaze_integration': 'unknown'}

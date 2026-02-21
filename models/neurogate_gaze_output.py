@@ -9,7 +9,7 @@ from models.base_components import GateDilate, ResConv, EEG_Attention_MultiRes
 
 class NeuroGATE_Gaze_Output(nn.Module):
     def __init__(self, n_chan: int = 22, n_outputs: int = 2, 
-                 original_time_length: int = 15000, dropout_rate: float = 0.5):
+                 original_time_length: int = 6000, dropout_rate: float = 0.2):
         super(NeuroGATE_Gaze_Output, self).__init__()
         
         self.n_chan = n_chan
@@ -129,7 +129,10 @@ class NeuroGATE_Gaze_Output(nn.Module):
         # SAME AS ORIGINAL
         if attention_map is not None:
             # Downsample attention to match feature resolution
-            attention_down = F.avg_pool1d(attention_map, kernel_size=125, stride=125)
+            # kernel_size = attention_map.shape[2] // features_120.shape[2]
+
+            attention_down = F.adaptive_avg_pool1d(attention_map, features_120.shape[2])
+
             # attention_down: [batch, 22, 120]
             
             # Apply attention (average over channels for features)

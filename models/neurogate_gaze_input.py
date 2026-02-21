@@ -12,14 +12,14 @@ class NeuroGATE_Gaze_Input(nn.Module):
     Uses gaze to modulate the EEG input directly
     """
     
-    def __init__(self, n_chan: int = 22, n_outputs: int = 2, original_time_length: int = 15000):
+    def __init__(self, n_chan: int = 22, n_outputs: int = 2, original_time_length: int = 6000):
         super().__init__()
         
         self.n_chan = n_chan
         self.n_outputs = n_outputs
         self.original_time_length = original_time_length
         
-        # 🔑 Learnable gaze strength for input modulation
+        # Learnable gaze strength for input modulation
         self.gaze_alpha = nn.Parameter(torch.tensor(1.0))
         
         # NeuroGATE architecture (same as output version but without attention layer)

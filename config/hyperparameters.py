@@ -7,33 +7,33 @@ from typing import Literal
 @dataclass
 class Hyperparameters:
     # Training parameters
-    batch_size: int = 32
+    batch_size: int = 8
     learning_rate: float = 1e-4
-    epochs: int = 25
+    epochs: int = 40
     accumulation_steps: int = 1
     
     # Model parameters
     n_channels: int = 22
     n_outputs: int = 2
-    original_time_length: int = 15000  # 5 minutes at 50 Hz
+    original_time_length: int = 6000  # 5 minutes at 50 Hz
     
     # Gaze integration type
     gaze_integration: Literal['input', 'output', 'both'] = 'output'
     
     # Gaze attention parameters
-    gaze_weight: float = 0.4  # Weight for gaze loss (output/both)
-    gaze_loss_type: str = 'cosine'  # 'mse', 'cosine', 'combined'
-    use_gaze_loss_scaling: bool = True  # If True, compute scaling factor; if False, use 1.0
+    gaze_weight: float = 0.3  # Weight for gaze loss (output/both)
+    gaze_loss_type: str = 'mse'  # 'mse', 'cosine', 'combined'
+    use_gaze_loss_scaling: bool = False  # If True, compute scaling factor; if False, use 1.0
     
     # Input integration parameters
     input_gaze_alpha: float = 1.0  # Initial gaze alpha for input integration
     
     # Early stopping
     patience: int = 10
-    early_stop_metric: str = 'balanced_acc'
+    early_stop_metric: str = 'eval_loss'
     
     # Data parameters
-    target_length: int = 15000  # 5 minutes of EEG at 50Hz
+    target_length: int = 6000  # 5 minutes of EEG at 50Hz
     eeg_sampling_rate: float = 50.0
     seed: int = 42
     
@@ -56,7 +56,7 @@ def get_hyp_for_integration(integration_type: str = 'output'):
         hyp.gaze_weight = 0.0  # No gaze loss for input integration
     elif integration_type == 'output':
         hyp.gaze_integration = 'output'
-        hyp.gaze_weight = 0.2
+        hyp.gaze_weight = 0.3
     elif integration_type == 'both':
         hyp.gaze_integration = 'both'
         hyp.gaze_weight = 0.2

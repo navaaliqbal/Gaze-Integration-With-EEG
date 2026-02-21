@@ -11,14 +11,14 @@ def train_epoch_input(model, train_loader, optimizer, device,
                      gaze_weight=None, gaze_loss_type=None, gaze_loss_scale=None, **kwargs):
     """
     Training epoch for input integration model
+    
+    Note: gaze_weight, gaze_loss_type, and gaze_loss_scale are accepted but ignored
+    because input integration doesn't use gaze loss (gaze is integrated at input level).
     """
     model.train()
     total_loss = 0.0
     correct = total = 0
     batches_with_gaze = samples_with_gaze = 0
-    
-    # Track gaze_alpha values
-    gaze_alpha_values = []
     
     if class_weights is not None:
         class_weights = class_weights.to(device)
@@ -32,24 +32,32 @@ def train_epoch_input(model, train_loader, optimizer, device,
         eeg = batch['eeg'].to(device)
         labels = batch['label'].to(device)
         
-        # Check for gaze data
+        # Get batch files
+        batch_files = []
+        if 'file' in batch:
+            for f in batch['file']:
+                if isinstance(f, (bytes, bytearray)):
+                    try:
+                        f = f.decode('utf-8', errors='ignore')
+                    except:
+                        f = str(f)
+                batch_files.append(os.path.basename(str(f)))
+        
+        # Check for gaze data (REQUIRED for input integration)
         has_gaze = 'gaze' in batch and batch['gaze'] is not None
         if has_gaze:
             gaze = batch['gaze'].to(device)
             batches_with_gaze += 1
             samples_with_gaze += eeg.shape[0]
         else:
-            # Fallback if no gaze
+            # For input integration, we need gaze data
+            # Use baseline attention if not available
             gaze = torch.ones_like(eeg).to(device) * 0.01
         
-        # Forward pass with input gaze
+        # Forward pass (input integration)
         logits = model(eeg, gaze)
         
-        # Get current gaze_alpha
-        if hasattr(model, 'gaze_alpha'):
-            gaze_alpha_values.append(model.gaze_alpha.item())
-        
-        # Classification loss only
+        # Classification loss only (no gaze loss for input integration)
         if class_weights is not None:
             loss = F.cross_entropy(logits, labels, weight=class_weights)
         else:
@@ -67,25 +75,34 @@ def train_epoch_input(model, train_loader, optimizer, device,
         correct += (preds == labels).sum().item()
         total += labels.size(0)
         
+        # Record batch statistics
+        if stats_tracker:
+            batch_stats = {
+                'epoch': epoch,
+                'batch_loss': loss.item(),
+                'batch_accuracy': (preds == labels).float().mean().item(),
+                'has_gaze': has_gaze,
+                'lr': current_lr,
+                'gaze_alpha': model.gaze_alpha.item() if hasattr(model, 'gaze_alpha') else 0.0
+            }
+            stats_tracker.record_batch(batch_idx, batch_stats)
+        
         # Update progress bar
         postfix = {
             'loss': f"{loss.item():.4f}",
             'acc': f"{correct/total*100:.1f}%",
             'gaze': 'Y' if has_gaze else 'N'
         }
-        if hasattr(model, 'gaze_alpha') and gaze_alpha_values:
-            postfix['alpha'] = f"{gaze_alpha_values[-1]:.3f}"
+        if hasattr(model, 'gaze_alpha'):
+            postfix['alpha'] = f"{model.gaze_alpha.item():.3f}"
         pbar.set_postfix(postfix)
     
     # Calculate epoch averages
     avg_loss = total_loss / max(len(train_loader), 1)
     acc = correct / total * 100 if total > 0 else 0.0
-    avg_alpha = sum(gaze_alpha_values) / len(gaze_alpha_values) if gaze_alpha_values else 0.0
     
     train_stats = {
         'loss': avg_loss,
-        'cls_loss': avg_loss,  # Add for consistency
-        'gaze_loss': 0.0,
         'acc': acc,
         'gaze_batches': batches_with_gaze,
         'gaze_samples': samples_with_gaze,
@@ -95,6 +112,6 @@ def train_epoch_input(model, train_loader, optimizer, device,
     }
     
     if hasattr(model, 'gaze_alpha'):
-        train_stats['gaze_alpha'] = avg_alpha
+        train_stats['gaze_alpha'] = model.gaze_alpha.item()
     
     return train_stats

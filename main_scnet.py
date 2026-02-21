@@ -154,8 +154,12 @@ def train_scnet_gaze(integration_type='output', output_suffix=None):
     # Calculate class weights from actual distribution
     class_counts = list(train_dist.values())
     total = sum(class_counts)
-    class_weights = torch.tensor([total / c for c in class_counts], dtype=torch.float32)
-    print(f"\nClass weights: {class_weights}")
+    num_classes = 2
+    total = len(train_loader.dataset)  # or sum(train_dist.values())
+    class_weights = torch.tensor(
+        [total / train_dist.get(i, 1) for i in range(num_classes)],
+        dtype=torch.float32
+    )
     
     print(f"\nStarting SCNet training for {hyps.epochs} epochs...")
     print("=" * 80)
