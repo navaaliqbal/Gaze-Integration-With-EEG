@@ -1,25 +1,84 @@
 """
 Generic trainer that dispatches to specific trainers based on model type
 """
+import torch
+import torch.nn.functional as F
+from tqdm import tqdm
+
 from training.trainer_input import train_epoch_input
 from training.trainer_output import train_epoch_output
 from training.trainer_combined import train_epoch_combined
-from config.hyperparameters import Hyperparameters
+from training.trainer_cls_only import train_epoch_cls_only
 from training.trainer_scnet import train_epoch_scnet
 from training.trainer_scnet_input import train_epoch_scnet_input
 def train_epoch(model, train_loader, optimizer, device, **kwargs):
     """
-    Generic training epoch that routes to appropriate trainer
+    model.train()
+    total_loss = 0.0
+    correct = total = 0
     
-    Args:
-        model: Model instance
-        **kwargs: Trainer-specific arguments
+    if class_weights is not None:
+        class_weights = class_weights.to(device)
+    
+    current_lr = optimizer.param_groups[0]['lr']
+    
+    pbar = tqdm(enumerate(train_loader), total=len(train_loader), 
+                desc=f"Epoch {epoch+1} [EEGNet-Only]")
+    
+    for batch_idx, batch in pbar:
+        eeg = batch['eeg'].to(device)
+        labels = batch['label'].to(device)
         
-    Returns:
-        Training statistics
-    """
+        # Forward pass
+        logits = model(eeg)
+        
+        # Classification loss
+        if class_weights is not None:
+            loss = F.cross_entropy(logits, labels, weight=class_weights)
+        else:
+            loss = F.cross_entropy(logits, labels)
+        
+        # Backward pass
+        optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
+        
+        # Statistics
+        total_loss += loss.item()
+        preds = torch.argmax(logits, dim=1)
+        correct += (preds == labels).sum().item()
+        total += labels.size(0)
+        
+        # Update progress bar
+        pbar.set_postfix({
+            'loss': f"{loss.item():.4f}",
+            'acc': f"{correct/total*100:.1f}%"
+        })
     
-    # Determine model type
+    # Calculate epoch averages
+    avg_loss = total_loss / max(len(train_loader), 1)
+    acc = correct / total * 100 if total > 0 else 0.0
+    
+    train_stats = {
+        'loss': avg_loss,
+        'cls_loss': avg_loss,
+        'gaze_loss': 0.0,
+        'acc': acc,
+        'total_batches': len(train_loader),
+        'total_samples': total,
+        'lr': current_lr,
+        'gaze_samples': 0,
+        'gaze_batches': 0
+    }
+    
+    return train_stats
+
+
+def train_epoch(model, train_loader, optimizer, device, **kwargs):
+    """
+    Dispatch to appropriate trainer based on model class name
+    """
     model_name = model.__class__.__name__.lower()
 
     if 'scnet' in model_name and 'input' in model_name:
@@ -29,14 +88,37 @@ def train_epoch(model, train_loader, optimizer, device, **kwargs):
         # All SCNet models use the SCNet trainer
         return train_epoch_scnet(model, train_loader, optimizer, device, **kwargs)
     
-    # Then check NeuroGATE models
-    elif 'input' in model_name:
-        return train_epoch_input(model, train_loader, optimizer, device, **kwargs)
-    elif 'output' in model_name:
-        return train_epoch_output(model, train_loader, optimizer, device, **kwargs)
-    elif 'combined' in model_name:
-        return train_epoch_combined(model, train_loader, optimizer, device, **kwargs)
-    else:
-        # Default to output integration
-        print(f"Warning: Unknown model type {model_name}, using output trainer")
-        return train_epoch_output(model, train_loader, optimizer, device, **kwargs)
+    # Check for specific EEGNet variants
+    if 'eegnet' in model_name:
+        if 'input' in model_name:
+            print("DEBUG -> Using EEGNet Input trainer")
+            return train_epoch_input(model, train_loader, optimizer, device, **kwargs)
+        elif 'output' in model_name:
+            print("DEBUG -> Using EEGNet Output trainer")
+            return train_epoch_output(model, train_loader, optimizer, device, **kwargs)
+        elif 'combined' in model_name:
+            print("DEBUG -> Using EEGNet Combined trainer")
+            return train_epoch_combined(model, train_loader, optimizer, device, **kwargs)
+        elif 'base' in model_name or model_name == 'eegnet_base':
+            print("DEBUG -> Using EEGNet Base trainer")
+            return train_epoch_eegnet_base(model, train_loader, optimizer, device, **kwargs)
+        else:
+            # Fallback for any other EEGNet variant
+            print(f"DEBUG -> Unknown EEGNet variant, using base trainer")
+            return train_epoch_eegnet_base(model, train_loader, optimizer, device, **kwargs)
+    
+    # Check for NeuroGATE variants
+    if 'neurogate' in model_name or 'gate' in model_name:
+        if 'input' in model_name:
+            print("DEBUG -> Using NeuroGATE Input trainer")
+            return train_epoch_input(model, train_loader, optimizer, device, **kwargs)
+        elif 'output' in model_name:
+            print("DEBUG -> Using NeuroGATE Output trainer")
+            return train_epoch_output(model, train_loader, optimizer, device, **kwargs)
+        elif 'combined' in model_name:
+            print("DEBUG -> Using NeuroGATE Combined trainer")
+            return train_epoch_combined(model, train_loader, optimizer, device, **kwargs)
+    
+    # Default fallback
+    print(f"DEBUG -> Warning: Unknown model type {model_name}, using cls-only trainer")
+    return train_epoch_cls_only(model, train_loader, optimizer, device, **kwargs)

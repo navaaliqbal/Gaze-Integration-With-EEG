@@ -76,7 +76,7 @@ class ResConv(nn.Module):
 
 class EEG_Attention(nn.Module):
     """Learnable attention module for gaze alignment"""
-    def __init__(self, n_channels=22, feature_channels=20, original_time_length=15000):
+    def __init__(self, n_channels=22, feature_channels=20, original_time_length=6000):
         super().__init__()
         
         self.n_channels = n_channels
@@ -148,7 +148,7 @@ class EEG_Attention(nn.Module):
 
 # ========== EEG ATTENTION MODULE (for combined) ==========
 class EEG_Attention_MultiRes(nn.Module):
-    def __init__(self, n_channels=22, feature_channels=20, original_time_length=15000):
+    def __init__(self, n_channels=22, feature_channels=20, original_time_length=6000):
         super().__init__()
         self.n_channels = n_channels
         self.original_time_length = original_time_length

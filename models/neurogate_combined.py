@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from models.base_components import GateDilate, ResConv, EEG_Attention_MultiRes
 
 class NeuroGATE_Combined(nn.Module):
-    def __init__(self, n_chan=22, n_outputs=2, original_time_length=15000, dropout_rate=0.5):
+    def __init__(self, n_chan=22, n_outputs=2, original_time_length=60000, dropout_rate=0.5):
         super().__init__()
         self.n_chan = n_chan
         self.n_outputs = n_outputs

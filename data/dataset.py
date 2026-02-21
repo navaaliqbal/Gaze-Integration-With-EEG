@@ -626,7 +626,7 @@ class EEGGazeFixationDataset(Dataset):
             match = re.search(r'_S(\d+)', basename)
             if match:
                 segment_num = int(match.group(1))
-        segment_offset = segment_num * 300  # 0, 300, 600, ... seconds
+        segment_offset = segment_num * 120  # 0, 300, 600, ... seconds
         
         if self.debug:
             print(f"\n1. EEG File: {basename}")

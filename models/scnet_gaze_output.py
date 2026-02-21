@@ -1,97 +1,69 @@
 """
-SCNet with gaze integration in OUTPUT (attention maps)
-Modified for 22-channel EEG input
+SCNet with gaze integration at OUTPUT level (attention maps)
+Modified for 22-channel EEG input with proper attention mechanism
 """
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from models.scnet_base import MFFMBlock, SILM
 
-class MFFMBlock(nn.Module):
-    def __init__(self, in_channels):
-        super(MFFMBlock, self).__init__()
-        self.conv1 = nn.Conv1d(in_channels=in_channels, out_channels=8, kernel_size=5, padding=2)
-        self.bn1 = nn.BatchNorm1d(8)
-        self.conv2 = nn.Conv1d(in_channels=in_channels + 8, out_channels=16, kernel_size=5, padding=2)
-        self.bn2 = nn.BatchNorm1d(16)
-
-        nn.init.xavier_uniform_(self.conv1.weight)
-        nn.init.xavier_uniform_(self.conv2.weight)
-
-    def forward(self, x):
-        x1 = F.relu(self.bn1(self.conv1(x)))
-        x1_cat = torch.cat((x1, x), dim=1)
-        x2 = F.relu(self.bn2(self.conv2(x1_cat)))
-        return torch.cat((x2, x1_cat), dim=1)
-
-class SILM(nn.Module):
-    def __init__(self):
-        super(SILM, self).__init__()
-
-    def forward(self, x):
-        # x shape: [B, 22, L] - 22 EEG channels
-        gap = torch.mean(x, dim=1, keepdim=True)  # [B, 1, L]
-        gsp = torch.std(x, dim=1, keepdim=True, unbiased=False)  # [B, 1, L]
-        gmp, _ = torch.max(x, dim=1, keepdim=True)  # [B, 1, L]
-        gap = F.dropout(gap, 0.05, training=self.training)
-        gsp = F.dropout(gsp, 0.05, training=self.training)
-        gmp = F.dropout(gmp, 0.05, training=self.training)
-        return torch.cat((x, gap, gsp, gmp), dim=1)  # [B, 25, L] (22 + 3)
 
 class SCNet_Gaze_Output(nn.Module):
     """
-    SCNet with gaze integration in output (attention maps)
-    Now accepts 22-channel EEG input
+    SCNet with gaze integration at output level
+    Generates attention maps from features and uses them to weight features
     """
     
-    def __init__(self, n_chan: int = 22, n_outputs: int = 2, original_time_length: int = 15000):
+    def __init__(self, n_chan: int = 22, n_outputs: int = 2, original_time_length: int = 6000):
         super().__init__()
         
-        self.n_chan = n_chan  # Changed to 22
-        self.n_outputs = n_outputs  # Changed to 2 for binary classification
+        self.n_chan = n_chan
+        self.n_outputs = n_outputs
         self.original_time_length = original_time_length
         
-        # SCNet Base Architecture - adjusted for 22→25 channels after SILM
-        self.silm = SILM()  # Output: [B, 25, L] (22 channels + 3 stats)
-        self.bn1 = nn.BatchNorm1d(50)  # Changed from 8 to 50 (25*2 after pooling)
+        # SILM: Input channels = n_chan, Output channels = n_chan + 3
+        self.silm = SILM()
         
-        # MFFM Blocks - now accept 50 channels input
-        self.mffm_block1 = MFFMBlock(50)  # Input: 50, Output: 50 + 24 = 74
-        self.mffm_block2 = MFFMBlock(50)
+        # After SILM and pooling: (n_chan + 3) * 2
+        silm_out_channels = n_chan + 3
+        self.bn1 = nn.BatchNorm1d(silm_out_channels * 2)
         
-        # Middle layers adjusted for larger channel dimensions
-        # MFFMBlock output: 50 + 24 = 74 channels
-        # After sum: 74 channels
-        self.conv1 = nn.Conv1d(in_channels=74, out_channels=64, kernel_size=3, padding=1)
+        # First set of MFFM blocks
+        self.mffm_block1 = MFFMBlock(silm_out_channels * 2)
+        self.mffm_block2 = MFFMBlock(silm_out_channels * 2)
+        
+        # After MFFM blocks: each outputs (input_channels + 24)
+        mffm_out_channels = (silm_out_channels * 2) + 24
+        
+        self.conv1 = nn.Conv1d(in_channels=mffm_out_channels, out_channels=64, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm1d(64)
-        self.mffm_block3 = MFFMBlock(64)  # Output: 64 + 24 = 88
-        self.mffm_block4 = MFFMBlock(64)
         
-        # After sum: 88 channels
-        self.conv2 = nn.Conv1d(in_channels=88, out_channels=64, kernel_size=3, padding=1)
-        self.bn3 = nn.BatchNorm1d(64)
-        self.mffm_block5 = MFFMBlock(64)  # Output: 64 + 24 = 88
-        self.conv3 = nn.Conv1d(in_channels=88, out_channels=64, kernel_size=3, padding=1)
-        
-        # ATTENTION LAYER for output integration
+        # Attention layer - generates attention from features at T/4 resolution
         self.attention_layer = nn.Sequential(
             nn.Conv1d(64, 32, kernel_size=3, padding=1),
             nn.BatchNorm1d(32),
             nn.ReLU(),
-            nn.Conv1d(32, 22, kernel_size=3, padding=1),  # Output: 22 channels
+            nn.Conv1d(32, n_chan, kernel_size=3, padding=1),  # Output: n_chan channels
             nn.Sigmoid()
         )
         
         # Upsample attention to original length
-        self.upsample = nn.Upsample(
-            size=original_time_length, 
-            mode='linear', 
-            align_corners=False
-        )
+        self.upsample = nn.Upsample(size=original_time_length, mode='linear', align_corners=False)
         
-        # Final classification layer
-        self.fc = nn.Linear(64, n_outputs)  # Input: 64 channels from conv3
+        # Second set of MFFM blocks
+        self.mffm_block3 = MFFMBlock(64)
+        self.mffm_block4 = MFFMBlock(64)
         
-        # Initialize weights
+        self.conv2 = nn.Conv1d(in_channels=88, out_channels=64, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm1d(64)
+        
+        # Third MFFM block
+        self.mffm_block5 = MFFMBlock(64)
+        self.conv3 = nn.Conv1d(in_channels=88, out_channels=64, kernel_size=3, padding=1)
+        
+        # Final classifier
+        self.fc = nn.Linear(64, n_outputs)
+        
         self._initialize_weights()
     
     def _initialize_weights(self):
@@ -105,99 +77,75 @@ class SCNet_Gaze_Output(nn.Module):
     
     def forward(self, x, return_attention=False):
         """
-        Forward pass for 22-channel EEG
+        Forward pass
         
         Args:
-            x: [B, 22, T] - EEG signals (22 channels)
+            x: [B, n_chan, T] - EEG signals
             return_attention: Whether to return attention map
             
         Returns:
-            If return_attention=False: logits only [batch, n_outputs]
-            If return_attention=True: dictionary with 'logits' and 'attention_map'
+            If return_attention=False: logits only [B, n_outputs]
+            If return_attention=True: dict with 'logits' and 'attention_map'
         """
-        batch_size, channels, original_time = x.shape
+        # SILM - add statistical features
+        x = self.silm(x)                                         # [B, n_chan+3, T]
         
-        # ========== 1. SCNet FEATURE EXTRACTION ==========
-        x = self.silm(x)                                 # [B, 25, L]
-        x1 = F.avg_pool1d(x, 2, 2)                       # [B, 25, L/2]
-        x2 = F.max_pool1d(x, 2, 2)                       # [B, 25, L/2]
-        x = torch.cat((x1, x2), dim=1)                   # [B, 50, L/2]
+        # Dual pooling
+        x1 = F.avg_pool1d(x, 2, 2)                               # [B, n_chan+3, T/2]
+        x2 = F.max_pool1d(x, 2, 2)                               # [B, n_chan+3, T/2]
+        x = torch.cat((x1, x2), dim=1)                           # [B, (n_chan+3)*2, T/2]
         x = self.bn1(x)
-
-        y1 = self.mffm_block1(x)                        # [B, 74, L/2]
-        y2 = self.mffm_block2(x)                        # [B, 74, L/2]
-        x = y1 + y2                                      # [B, 74, L/2]
-        # FIX: Use dropout1d instead of dropout2d for 1D signals
-        x = F.dropout(x, 0.5, training=self.training)  # Changed from dropout2d
-
-        x = F.max_pool1d(x, 2, 2)                       # [B, 74, L/4]
-        x = F.relu(self.bn2(self.conv1(x)))             # [B, 64, L/4]
-
-        #  Extract features at this level for attention generation
-        attention_features = x.clone()                  # [B, 64, L/4]
         
-        y1 = self.mffm_block3(x)                        # [B, 88, L/4]
-        y2 = self.mffm_block4(x)                        # [B, 88, L/4]
-        x = y1 + y2                                      # [B, 88, L/4]
-        x = F.relu(self.bn3(self.conv2(x)))             # [B, 64, L/4]
-
-        x = self.mffm_block5(x)                         # [B, 88, L/4]
-        x = F.max_pool1d(x, 2, 2)                       # [B, 88, L/8]
-
-        x = self.conv3(x)                               # [B, 64, L/8]
+        # First MFFM blocks with residual
+        y1 = self.mffm_block1(x)                                 # [B, (n_chan+3)*2+24, T/2]
+        y2 = self.mffm_block2(x)                                 # [B, (n_chan+3)*2+24, T/2]
+        x = y1 + y2                                               # [B, (n_chan+3)*2+24, T/2]
+        x = F.dropout(x, 0.5, training=self.training)
         
-        # ========== 2. GENERATE ATTENTION MAP ==========
+        # Pool and conv
+        x = F.max_pool1d(x, 2, 2)                                # [B, (n_chan+3)*2+24, T/4]
+        x = F.relu(self.bn2(self.conv1(x)))                      # [B, 64, T/4]
+        
+        # Extract features for attention generation (at T/4 resolution)
+        attention_features = x.clone()
+        
+        # Second MFFM blocks with residual
+        y1 = self.mffm_block3(x)                                 # [B, 88, T/4]
+        y2 = self.mffm_block4(x)                                 # [B, 88, T/4]
+        x = y1 + y2                                               # [B, 88, T/4]
+        x = F.relu(self.bn3(self.conv2(x)))                      # [B, 64, T/4]
+        
+        # Third MFFM block
+        x = self.mffm_block5(x)                                   # [B, 88, T/4]
+        x = F.max_pool1d(x, 2, 2)                                # [B, 88, T/8]
+        x = self.conv3(x)                                         # [B, 64, T/8]
+        
+        # Generate and apply attention if requested
         attention_map = None
         if return_attention:
-            # Generate attention from features
-            attention_reduced = self.attention_layer(attention_features)  # [B, 22, L/4]
+            # Generate attention from features at T/4 resolution
+            att_map_low = self.attention_layer(attention_features)  # [B, n_chan, T/4]
             
-            # Upsample to original time length
-            attention_map = self.upsample(attention_reduced)  # [B, 22, T]
+            # Upsample to original resolution
+            attention_map = self.upsample(att_map_low)              # [B, n_chan, T]
             
-            # FIX: Apply attention to features CORRECTLY
-            # We need to downsample attention to match feature size (L/8)
-            attention_down = F.avg_pool1d(attention_map, kernel_size=8, stride=8)  # T → T/8
-            attention_down = F.avg_pool1d(attention_down, kernel_size=2, stride=2)  # T/8 → T/16? Wait, let's compute...
+            # Downsample attention to match current feature resolution (T/8)
+            att_down = F.avg_pool1d(attention_map, kernel_size=8, stride=8)  # T/8
             
-            # Actually, features are at L/8, attention_map is at T
-            # We need: T → L/8 = T/8 if L=T
-            # But L = T/4 at attention_features stage...
-            # Let me trace:
-            # Input: T
-            # After silm: T
-            # After first pool: T/2
-            # After second pool: T/4 (attention_features stage)
-            # After third pool: T/8 (final features stage)
+            # Average across channels to get temporal weights
+            att_weights = att_down.mean(dim=1, keepdim=True)        # [B, 1, T/8]
             
-            # So to go from attention_map (T) to features (T/8):
-            # We need to downsample by factor of 8
-            attention_down = F.avg_pool1d(attention_map, kernel_size=8, stride=8)  # T → T/8
-            
-            # Now attention_down should match x in time dimension
-            attention_weights = attention_down.mean(dim=1, keepdim=True)  # [B, 1, T/8]
-            
-            # Verify dimensions match
-            if x.shape[-1] != attention_weights.shape[-1]:
-                # If still mismatched, interpolate
-                attention_weights = F.interpolate(
-                    attention_weights, 
-                    size=x.shape[-1], 
-                    mode='linear', 
-                    align_corners=False
-                )
-            
-            x = x * attention_weights
+            # Apply attention to features
+            x = x * att_weights
         
-        # ========== 3. CLASSIFICATION ==========
-        x_pooled = torch.mean(x, dim=2)                  # [B, 64]
-        logits = self.fc(x_pooled)                      # [B, n_outputs]
+        # Global pooling and classification
+        x = x.mean(dim=2)                                           # [B, 64]
+        logits = self.fc(x)                                          # [B, n_outputs]
         
-        # ========== RETURN VALUES ==========
         if return_attention:
             return {
                 'logits': logits,
-                'attention_map': attention_map,  # [B, 22, T] - matches EEG channels
+                'attention_map': attention_map,  # [B, n_chan, T]
                 'features': x
             }
         else:
@@ -208,12 +156,6 @@ class SCNet_Gaze_Output(nn.Module):
         with torch.no_grad():
             outputs = self.forward(x, return_attention=True)
             return outputs['attention_map']
-    
-    def get_features(self, x):
-        """Get intermediate features"""
-        with torch.no_grad():
-            outputs = self.forward(x, return_attention=True)
-            return outputs['features']
     
     def get_config(self):
         """Get model configuration"""
